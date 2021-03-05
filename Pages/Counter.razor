@@ -1,0 +1,43 @@
+@page "/counter"
+
+<h1>Counter</h1>
+
+<p>Current count: @currentCount</p>
+
+<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+
+@using OpenTelemetry;
+@using OpenTelemetry.Resources
+@using OpenTelemetry.Trace
+@using System.Diagnostics
+
+@code {
+    private int currentCount = 0;
+
+    private void IncrementCount()
+    {
+        Trace(currentCount++);
+    }
+
+    private void Trace(int currentCount)
+    {
+        using var openTelemetry = Sdk.CreateTracerProviderBuilder()
+                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("blazor-otel"))
+                .AddSource("BlazorUI")
+                .AddZipkinExporter(o =>
+                {
+                    o.Endpoint = new Uri("http://localhost:9411/api/v2/spans");
+                    o.ExportProcessorType = ExportProcessorType.Simple;
+                })
+                .Build();
+        using var source = new ActivitySource("BlazorUI");
+        using (var activity = source.StartActivity("Click", ActivityKind.Client))
+        {
+            activity?.AddEvent(new ActivityEvent("The count button was clicked"));
+
+            activity?.SetTag("count", currentCount);
+            activity?.SetTag("mouse.x", 123);
+            activity?.SetTag("mouse.y", 2323);
+        }
+    }
+}
